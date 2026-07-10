@@ -27,3 +27,5 @@
 - 웹검색은 `web_search_options={}` (Anthropic tool 버전 문자열 하드코딩 금지 — LiteLLM이 모델에 맞게 변환).
 - Notion MCP: `mcp-router/main.py`의 lifespan에서 `npx @notionhq/notion-mcp-server` stdio 연결, `env=os.environ.copy()`로 토큰 전달(변수명 비의존). node 필요. Agent는 이 연결에 직접 접근하지 않고 Router HTTP API로만 통신한다.
 - 설계/계획 문서: `docs/superpowers/specs/`, `docs/superpowers/plans/`. 이 프로젝트는 git 저장소이며(origin/main 존재) `docs/`는 `.gitignore`로 비추적 처리되어 있다(파일은 디스크에 유지, git 이력에는 없음).
+- `gh` CLI는 미인증 상태일 수 있다 — PR 생성 전 사용자가 `! gh auth login` 필요(브랜치 `git push`는 정상). PR 본문은 파일로 만들어 `gh pr create --body-file`로 전달.
+- Agent 도구 목록은 `_tools_cache`로 프로세스 생애 **1회만** Router에서 조회한다. Router가 안 떠 있을 때 첫 `/chat`이 도착하면 `tools=[]`가 영구 캐시됨 → Notion 도구가 안 보이면 Agent를 재기동. `scripts/run.sh`는 Router/Agent를 병렬로 띄운다.
