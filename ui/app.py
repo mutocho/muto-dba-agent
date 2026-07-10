@@ -1,12 +1,13 @@
 import json
 import os
 import sys
+from pathlib import Path
 
 import httpx
 import streamlit as st
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
 
 def chat_page():
