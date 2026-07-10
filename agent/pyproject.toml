@@ -1,0 +1,12 @@
+[project]
+name = "muto-agent-server"
+version = "0.1.0"
+description = "muto_agent LLM 오케스트레이션 백엔드"
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi",
+    "uvicorn",
+    "openai",
+    "python-dotenv",
+    "httpx",
+]

@@ -1,0 +1,11 @@
+[project]
+name = "muto-ui"
+version = "0.1.0"
+description = "muto_agent Streamlit UI"
+requires-python = ">=3.10"
+dependencies = [
+    "streamlit",
+    "python-dotenv",
+    "httpx",
+    "watchdog",
+]

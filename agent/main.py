@@ -1,68 +1,70 @@
 import json
 import os
-from contextlib import AsyncExitStack, asynccontextmanager
+from pathlib import Path
 
+import httpx
 from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.responses import StreamingResponse
-from mcp import ClientSession, StdioServerParameters
-from mcp.client.stdio import stdio_client
 from openai import AsyncOpenAI
 from pydantic import BaseModel
 
-load_dotenv()
+load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
 MODEL_NAME = os.getenv("MODEL_NAME")
 MAX_TOOL_ITERATIONS = 8
+
+MCP_ROUTER_HOST = os.getenv("MCP_ROUTER_HOST", "127.0.0.1")
+MCP_ROUTER_PORT = os.getenv("MCP_ROUTER_PORT", "8010")
+MCP_ROUTER_URL = f"http://{MCP_ROUTER_HOST}:{MCP_ROUTER_PORT}"
 
 client = AsyncOpenAI(
     base_url=os.getenv("OPENAI_BASE_URL"),
     api_key=os.getenv("OPENAI_API_KEY"),
 )
 
-# MCP 상태 (lifespan에서 채운다)
-mcp_state = {"session": None, "tools": []}
+# MCP Router에서 받아온 도구 목록 캐시 (최초 1회 조회)
+_tools_cache = {"tools": None}
 
 
-def _to_openai_tools(mcp_tools):
-    return [
-        {
-            "type": "function",
-            "function": {
-                "name": tool.name,
-                "description": tool.description or "",
-                "parameters": tool.inputSchema,
-            },
-        }
-        for tool in mcp_tools
-    ]
-
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    stack = AsyncExitStack()
+async def _get_openai_tools():
+    if _tools_cache["tools"] is not None:
+        return _tools_cache["tools"]
     try:
-        server_params = StdioServerParameters(
-            command="npx",
-            args=["-y", "@notionhq/notion-mcp-server"],
-            env=os.environ.copy(),
-        )
-        read, write = await stack.enter_async_context(stdio_client(server_params))
-        session = await stack.enter_async_context(ClientSession(read, write))
-        await session.initialize()
-        tools_result = await session.list_tools()
-        mcp_state["session"] = session
-        mcp_state["tools"] = tools_result.tools
-        print(f"MCP 연결됨: 도구 {len(tools_result.tools)}개 로드")
+        async with httpx.AsyncClient() as http:
+            resp = await http.get(f"{MCP_ROUTER_URL}/tools", timeout=10)
+            resp.raise_for_status()
+            mcp_tools = resp.json()
+        tools = [
+            {
+                "type": "function",
+                "function": {
+                    "name": tool["name"],
+                    "description": tool["description"],
+                    "parameters": tool["inputSchema"],
+                },
+            }
+            for tool in mcp_tools
+        ]
     except Exception as error:
-        print(f"MCP 연결 실패(도구 없이 계속): {error!r}")
-    try:
-        yield
-    finally:
-        await stack.aclose()
+        print(f"MCP Router 도구 조회 실패(도구 없이 계속): {error!r}")
+        tools = []
+    _tools_cache["tools"] = tools
+    return tools
 
 
-app = FastAPI(lifespan=lifespan)
+async def _call_mcp_tool(name, arguments):
+    async with httpx.AsyncClient() as http:
+        resp = await http.post(
+            f"{MCP_ROUTER_URL}/call",
+            json={"name": name, "arguments": arguments},
+            timeout=None,
+        )
+        resp.raise_for_status()
+        return resp.json()["content"]
+
+
+app = FastAPI()
 
 
 class ChatRequest(BaseModel):
@@ -71,18 +73,12 @@ class ChatRequest(BaseModel):
 
 @app.get("/")
 def health():
-    return {"status": "ok", "mcp_tools": len(mcp_state["tools"])}
-
-
-async def _call_mcp_tool(name, arguments):
-    session = mcp_state["session"]
-    result = await session.call_tool(name, arguments)
-    return "".join(getattr(block, "text", "") for block in result.content)
+    return {"status": "ok"}
 
 
 @app.post("/chat")
 async def chat(request: ChatRequest):
-    tools = _to_openai_tools(mcp_state["tools"]) if mcp_state["tools"] else None
+    tools = await _get_openai_tools()
 
     async def event_stream():
         try:

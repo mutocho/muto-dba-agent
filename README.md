@@ -1,27 +1,39 @@
-# LiteLLM Streamlit 챗봇
+# muto_agent
 
-OpenAI 호환 LiteLLM Proxy에 붙는 간단한 웹 챗봇. 멀티턴 대화와 스트리밍 응답을 지원합니다.
+OpenAI 호환 LiteLLM Proxy(Claude 모델)에 붙는 3-서비스 챗봇.
 
-## 설정
+## 구조
 
-`.env` 파일에 Proxy 정보를 입력하세요:
-
-```
-OPENAI_BASE_URL=http://your-proxy-host/v1
-OPENAI_API_KEY=your-proxy-api-key
-MODEL_NAME=your-model-name
-```
-
-## 실행
-
-[uv](https://docs.astral.sh/uv/)만 있으면 별도 설치 단계 없이 바로 실행됩니다. uv가 `pyproject.toml`의 의존성을 자동으로 준비합니다.
+- `ui/` — Streamlit 프론트엔드
+- `agent/` — LLM 오케스트레이션 백엔드(FastAPI, `/chat` SSE)
+- `mcp-router/` — MCP(Notion) 연결·도구 라우팅(FastAPI, `/tools` `/call`)
+- `scripts/` — 기동 스크립트
+- 루트 `.env` — 세 서비스가 공유하는 설정
 
 ```
-uv run app.py
+UI ─http SSE→ Agent ─http→ MCP Router ─stdio→ Notion MCP
 ```
 
-`app.py`가 streamlit 런타임 밖에서 실행되면 자기 자신을 `streamlit run`으로 재실행하므로, 위 한 줄이면 됩니다.
+## 실행 (uv, 설치 불필요)
 
-`.streamlit/config.toml`에 `runOnSave = true`가 설정돼 있어 코드를 수정하고 저장하면 브라우저에 자동으로 반영됩니다(watchdog으로 변경 감지).
+- 전체 동시 기동: `scripts/run.sh`
+- 개별 기동: `scripts/run_router.sh` / `scripts/run_agent.sh` / `scripts/run_app.sh`
 
-브라우저는 자동으로 열리지 않습니다(headless). 터미널에 표시되는 Local URL(예: http://localhost:8501)로 직접 접속하세요. 메시지를 입력하면 스트리밍으로 응답이 출력되고, 이어지는 질문은 이전 대화 맥락을 유지합니다.
+각 앱은 자체 `pyproject.toml`을 가진 독립 uv 프로젝트다.
+
+## 설정 (.env)
+
+루트 `.env`에 다음을 둔다(포트/호스트는 모두 오버라이드 가능):
+
+```
+STREAMLIT_PORT=8501
+AGENT_HOST=127.0.0.1
+AGENT_PORT=8000
+MCP_ROUTER_HOST=127.0.0.1
+MCP_ROUTER_PORT=8010
+OPENAI_BASE_URL=...
+OPENAI_API_KEY=...
+MODEL_NAME=...
+```
+
+MCP Router는 `npx @notionhq/notion-mcp-server`를 stdio로 띄우므로 node가 필요하다.
