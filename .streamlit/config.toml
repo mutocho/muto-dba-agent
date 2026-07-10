@@ -1,0 +1,5 @@
+[server]
+# 파일 저장 시 자동으로 앱을 재실행 (수정 즉시 반영)
+runOnSave = true
+# 구동 시 브라우저를 자동으로 열지 않음 (URL로 직접 접속)
+headless = true
