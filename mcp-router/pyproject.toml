@@ -1,0 +1,11 @@
+[project]
+name = "muto-mcp-router"
+version = "0.1.0"
+description = "muto_agent MCP 연결·도구 라우팅 서비스"
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi",
+    "uvicorn",
+    "mcp",
+    "python-dotenv",
+]
