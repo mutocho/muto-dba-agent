@@ -79,6 +79,7 @@ def health():
 @app.post("/chat")
 async def chat(request: ChatRequest):
     tools = await _get_openai_tools()
+    mcp_tool_names = {tool["function"]["name"] for tool in tools}
 
     async def event_stream():
         try:
@@ -95,7 +96,14 @@ async def chat(request: ChatRequest):
                     kwargs["tools"] = tools
                 resp = await client.chat.completions.create(**kwargs)
                 message = resp.choices[0].message
-                if message.tool_calls:
+                # web_search 등 프록시가 서버에서 실행하는 툴(id: srvtoolu_)은 이미 답변에
+                # 반영돼 되돌아온다. 우리가 등록한 MCP 툴만 클라이언트가 실행한다.
+                client_tool_calls = [
+                    tc
+                    for tc in (message.tool_calls or [])
+                    if tc.function.name in mcp_tool_names
+                ]
+                if client_tool_calls:
                     messages.append(
                         {
                             "role": "assistant",
@@ -109,11 +117,11 @@ async def chat(request: ChatRequest):
                                         "arguments": tc.function.arguments,
                                     },
                                 }
-                                for tc in message.tool_calls
+                                for tc in client_tool_calls
                             ],
                         }
                     )
-                    for tc in message.tool_calls:
+                    for tc in client_tool_calls:
                         try:
                             arguments = json.loads(tc.function.arguments or "{}")
                             content = await _call_mcp_tool(tc.function.name, arguments)
